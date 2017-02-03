@@ -23,9 +23,12 @@ package org.deidentifier.arx.benchmark;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.deidentifier.arx.AttributeType.Hierarchy;
 import org.deidentifier.arx.Data;
+import org.deidentifier.arx.DataGeneralizationScheme;
 
 /**
  * Benchmark of ARX's implementation of the game theoretic approach proposed in: <br>
@@ -37,7 +40,7 @@ import org.deidentifier.arx.Data;
  * @author Fabian Prasser
  */
 public class BenchmarkSetup {
-    
+
     public static enum BenchmarkDataset {
         
         ADULT {
@@ -89,7 +92,42 @@ public class BenchmarkSetup {
             }
         },
     }
-    
+    /**
+     * Some values indicating desired generalization heights
+     */
+    public static enum BenchmarkGeneralizationDegree {
+        NONE {
+            @Override
+            public String toString() {
+                return "none";
+            }
+        },
+        LOW {
+            @Override
+            public String toString() {
+                return "low";
+            }
+        },
+        LOW_MIDDLE {
+            @Override
+            public String toString() {
+                return "low-middle";
+            }
+        },
+        MIDDLE_HIGH {
+            @Override
+            public String toString() {
+                return "middle-high";
+            }
+        },
+        HIGH {
+            @Override
+            public String toString() {
+                return "high";
+            }
+        }
+    }
+
     /**
      * Returns the dataset for the given name
      * @param name
@@ -103,7 +141,17 @@ public class BenchmarkSetup {
         }
         throw new IllegalArgumentException("Unknown dataset");
     }
-    
+
+    public static DataGeneralizationScheme getScheme(Data data, 
+                                                     BenchmarkGeneralizationDegree degree) {
+        DataGeneralizationScheme scheme = DataGeneralizationScheme.create(data);
+        
+        for (String attribute : data.getDefinition().getQuasiIdentifyingAttributes()) {
+            scheme.generalize(attribute, getGeneralizationLevel(data.getDefinition().getHierarchy(attribute)[0].length,
+                                                                degree));
+        }
+        return scheme;
+    }
     /**
      * Configures and returns the dataset
      * @param dataset
@@ -156,16 +204,15 @@ public class BenchmarkSetup {
         }
         
         return data;
-    }
-
+    };
     /**
      * Default parameter
      * @return
      */
-    public static int getDefaultPublisherLoss() {
-        return 300;
+    public static int getDefaultAdversaryCost() {
+        return 4;
     }
-
+    
     /**
      * Default parameter
      * @return
@@ -173,7 +220,7 @@ public class BenchmarkSetup {
     public static int getDefaultAdversaryGain() {
         return 300;
     }
-
+    
     /**
      * Default parameter
      * @return
@@ -186,57 +233,128 @@ public class BenchmarkSetup {
      * Default parameter
      * @return
      */
-    public static int getDefaultAdversaryCost() {
-        return 4;
+    public static int getDefaultPublisherLoss() {
+        return 300;
     }
-    
-    public static int getNumberOfRepetitions(BenchmarkDataset dataset) {
-        if (dataset == BenchmarkDataset.ADULT_NC ||
-            dataset == BenchmarkDataset.ADULT_TN) {
-            return 100;
-        } else {
-            return 10;
+
+    /**
+     * Returns a fitting delta for dataset
+     * @param dataset
+     * @return
+     * @throws IOException
+     */
+    public static double getDelta(BenchmarkDataset dataset) {
+        switch (dataset) {
+        case ADULT:
+            return 1e-5;
+        case ATUS:
+        case FARS:
+            return 1e-6;
+        case IHIS:
+            return 1e-7;
+        default:
+            throw new RuntimeException("Invalid dataset");
         }
     }
 
     /**
-     * Parameters to benchmark
+     * Returns all relevant generalization degrees
      * @return
      */
-    public static double[] getParametersPublisherLoss() {
-        return new double[]{0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000};
+    public static BenchmarkGeneralizationDegree[] getGeneralizationDegrees() {
+        return new BenchmarkGeneralizationDegree[] {
+                BenchmarkGeneralizationDegree.LOW,
+                BenchmarkGeneralizationDegree.LOW_MIDDLE,
+                BenchmarkGeneralizationDegree.MIDDLE_HIGH
+        };
     }
 
     /**
-     * Parameters to benchmark
+     * Returns the according generalization level
+     * @param height
+     * @param generalization
      * @return
      */
-    public static double[] getParametersAdversaryGain() {
-        return new double[]{1d, 1.01d, 1.1d, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000, 1250, 1500, 1750, 2000};
-    }
+    @SuppressWarnings("incomplete-switch")
+    public static int getGeneralizationLevel(int height, BenchmarkGeneralizationDegree generalization) {
 
-    /**
-     * Parameters to benchmark
-     * @return
-     */
-    public static double[] getParametersAdversaryCost() {
-        return new double[]{1d, 1.01d, 1.1d, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000, 1250, 1500, 1750, 2000};
-    }
-    
-    /**
-     * Parameters to benchmark
-     * @return
-     */
-    public static double[] getParametersPublisherBenefit() {
-        return new double[]{250, 500, 750, 1000, 1250, 1500, 1750, 2000};
-    }
+        if (generalization == BenchmarkGeneralizationDegree.NONE) {
+            return 0;
+        }
 
-    /**
-     * Parameters to benchmark
-     * @return
-     */
-    public static double[] getParametersGainLoss() {
-        return new double[]{0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000};
+        switch (height) {
+        case 2:
+            switch (generalization) {
+            case LOW:
+                return 0;
+            case LOW_MIDDLE:
+                return 0;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 0;
+            }
+        case 3:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 1;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 1;
+            }
+        case 4:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 2;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 2;
+            }
+        case 5:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 2;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 3;
+            }
+        case 6:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 3;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 4;
+            }
+        case 7:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 3;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 5;
+            }
+        case 8:
+            switch (generalization) {
+            case LOW:
+                return 1;
+            case LOW_MIDDLE:
+                return 4;
+            case MIDDLE_HIGH:
+            case HIGH:
+                return 6;
+            }
+        }
+        throw new IllegalArgumentException("Unknown parameter");
     }
     
     /**
@@ -268,7 +386,16 @@ public class BenchmarkSetup {
             throw new RuntimeException("Invalid dataset");
         }
     }
-    
+
+    public static int getNumberOfRepetitions(BenchmarkDataset dataset) {
+        if (dataset == BenchmarkDataset.ADULT_NC ||
+            dataset == BenchmarkDataset.ADULT_TN) {
+            return 100;
+        } else {
+            return 10;
+        }
+    }
+
     /**
      * Returns the number of records in the given dataset
      * @param dataset
@@ -277,6 +404,46 @@ public class BenchmarkSetup {
      */
     public static int getNumRecords(BenchmarkDataset dataset) throws IOException {
         return getData(dataset).getHandle().getNumRows();
+    }
+
+    /**
+     * Parameters to benchmark
+     * @return
+     */
+    public static double[] getParametersAdversaryCost() {
+        return new double[]{1d, 1.01d, 1.1d, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000, 1250, 1500, 1750, 2000};
+    }
+    
+    /**
+     * Parameters to benchmark
+     * @return
+     */
+    public static double[] getParametersAdversaryGain() {
+        return new double[]{1d, 1.01d, 1.1d, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000, 1250, 1500, 1750, 2000};
+    }
+
+    /**
+     * Parameters to benchmark
+     * @return
+     */
+    public static double[] getParametersGainLoss() {
+        return new double[]{0, 10, 100, 1000, 10000, 100000, 1000000};
+    }
+    
+    /**
+     * Parameters to benchmark
+     * @return
+     */
+    public static double[] getParametersPublisherBenefit() {
+        return new double[]{250, 500, 750, 1000, 1250, 1500, 1750, 2000};
+    }
+    
+    /**
+     * Parameters to benchmark
+     * @return
+     */
+    public static double[] getParametersPublisherLoss() {
+        return new double[]{0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000};
     }
 
     /**
